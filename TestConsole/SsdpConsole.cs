@@ -14,6 +14,7 @@ namespace TestConsole
         {
             locator = new SsdpLocator();
             locator.Devices.CollectionChanged += new System.Collections.Specialized.NotifyCollectionChangedEventHandler(DevicesCollectionChanged);
+            locator.SendSsdpIdentificationRequest();
             Console.ReadLine();
         }
 

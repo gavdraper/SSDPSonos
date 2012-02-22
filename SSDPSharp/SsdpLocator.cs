@@ -1,11 +1,16 @@
 ﻿using System.Collections.ObjectModel;
+using System.Net;
 using System.Net.Sockets;
+using System.Text;
+
+//Based on draft SSDP spec at
+//  ftp://ftp.pwg.org/pub/pwg/ipp/new_SSDP/draft-cai-ssdp-v1-03.txt
 
 namespace SSDPSharp
 {    
     public class SsdpLocator
     {
-        const string multicastAddress = "239.255.255.250";
+        IPAddress multicastAddress = IPAddress.Parse("239.255.255.250");
         const int multicastPort = 1900;
         const int unicastPort = 1901;
 
@@ -33,10 +38,15 @@ namespace SSDPSharp
 
         public void SendSsdpIdentificationRequest()
         {
-            var SsdpSocket = new Socket(
-                AddressFamily.InterNetwork,
-                SocketType.Dgram,
-                ProtocolType.Udp);
+            using (var identificationRequest = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
+            {
+                identificationRequest.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership,new MulticastOption(multicastAddress));
+                identificationRequest.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.MulticastTimeToLive, 2);
+                identificationRequest.Connect(new IPEndPoint(multicastAddress, multicastPort));
+                var message = Encoding.UTF8.GetBytes(broadcastMessage);
+                identificationRequest.Send(message, message.Length, SocketFlags.None);
+                identificationRequest.Close();
+            }
         }
 
     }
