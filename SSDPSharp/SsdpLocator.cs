@@ -1,5 +1,7 @@
-﻿using System;
+﻿using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
@@ -15,7 +17,8 @@ namespace SSDPSharp
         readonly IPAddress multicastAddress = IPAddress.Parse("239.255.255.250");
         const int multicastPort = 1900;
         const int unicastPort = 1901;
-
+        const int searchTimeOut = 3000;
+        
         const string messageHeader = "M-SEARCH * HTTP/1.1";
         const string messageHost = "HOST: 239.255.255.250:1900";
         const string messageMan = "MAN: \"ssdp:discover\"";
@@ -43,32 +46,59 @@ namespace SSDPSharp
             using (var socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
             {
                 socket.Bind(new IPEndPoint(IPAddress.Any, unicastPort));
-                socket.Connect(new IPEndPoint(multicastAddress, multicastPort));
-                var thd = new Thread(()=>GetSocketResponse(socket));                
-                socket.Send(broadcastMessage, 0, broadcastMessage.Length, SocketFlags.None);
+                socket.SetSocketOption(SocketOptionLevel.IP, SocketOptionName.AddMembership, new MulticastOption(multicastAddress, IPAddress.Any));
+                var thd = new Thread(() => GetSocketResponse(socket));
+                socket.SendTo(broadcastMessage, 0, broadcastMessage.Length, SocketFlags.None, new IPEndPoint(multicastAddress, multicastPort));
                 thd.Start();
-                Thread.Sleep(20000);
+                Thread.Sleep(searchTimeOut);
                 socket.Close();
             }
         }
 
+        public string GetLocation(string str)
+        {
+            if (str.StartsWith("HTTP/1.1 200 OK"))
+            {
+                var reader = new StringReader(str);
+                var lines = new List<string>();
+                for (;;)
+                {
+                    var line = reader.ReadLine();
+                    if (line == null) break; 
+                    if (line != "") lines.Add(line);
+                }
+                var location = lines.Where(lin => lin.ToLower().StartsWith("location:")).First();
+                if (!string.IsNullOrEmpty(location) && 
+                        (
+                            Devices.Count == 0 ||
+                            (from d in Devices where d.Location == location select d).FirstOrDefault() == null)
+                        )
+                {
+                    return location.Replace("LOCATION: ","");
+                }
+            }
+            return "";
+        }
+
         public void GetSocketResponse(Socket socket)
         {
-                try
+            try
+            {
+                while (true)
                 {
-                    while (true)
-                    {
-                        var response = new byte[8000];
-                        EndPoint ep = new IPEndPoint(IPAddress.Any, unicastPort);
-                        socket.ReceiveFrom(response, ref ep);
-                        var str = Encoding.UTF8.GetString(response);
-                        Devices.Add(new SsdpDevice() { Location = str });
-                    }
+                    var response = new byte[8000];
+                    EndPoint ep = new IPEndPoint(IPAddress.Any, multicastPort);
+                    socket.ReceiveFrom(response, ref ep);
+                    var str = Encoding.UTF8.GetString(response);
+                    var location = GetLocation(str);
+                    if(!string.IsNullOrEmpty(location))
+                        Devices.Add(new SsdpDevice() { Location = location });
                 }
-                catch
-                {
-                    //TODO handle exception for when connection closes
-                }
+            }
+            catch
+            {
+                //TODO handle exception for when connection closes
+            }
 
         }
 

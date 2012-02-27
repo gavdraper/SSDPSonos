@@ -42,7 +42,14 @@ namespace TestConsole
             Console.Clear();
             Console.WriteLine("Hit The Sync Buttons On The Sonos Device You Want To Discover Then Press Enter");
             Console.ReadLine();
-            locator.CreateSsdpListener();            
+            Console.WriteLine("Searching");
+            locator.CreateSsdpListener();  
+            Console.WriteLine("Finished");
+
+            foreach(var d in locator.Devices)
+                Console.WriteLine(d.Location);
+
+            Console.ReadLine();
             ShowMenu();
         }
 
